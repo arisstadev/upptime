@@ -1,30 +1,44 @@
 name: Notification CI
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - 'history/*.yml'
+  workflow_run:
+    workflows: ["Uptime CI"]
+    types:
+      - completed
 
 jobs:
   notify:
     name: Send notifications
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Get changed files
+        id: changes
+        run: |
+          git diff --name-only HEAD~1 HEAD | grep "history/" || echo "no-changes"
+
+      - name: Check for status changes
+        id: check
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "history/" || echo "")
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+            echo "message=$LAST_COMMIT_MSG" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Send Telegram notification
+        if: steps.check.outputs.has_changes == 'true'
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            🔔 Status change detected
-            
-            ${{ github.event.head_commit.message }}
+            🔔 ${{ steps.check.outputs.message }}
             
             Repository: ${{ github.repository }}
-            Commit: ${{ github.sha }}
