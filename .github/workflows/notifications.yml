@@ -25,7 +25,6 @@ jobs:
             echo "has_changes=true" >> $GITHUB_OUTPUT
             COMMIT_MSG=$(git log -1 --pretty=%B)
             
-            # Detectar si es UP o DOWN
             if echo "$COMMIT_MSG" | grep -q "is up"; then
               STATUS="🟢 RECUPERADO"
               EMOJI="✅"
@@ -54,7 +53,7 @@ jobs:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           format: markdown
           message: |
-            ${{ steps.check.outputs.emoji }} *ALERTA DE MONITOREO* ${{ steps.check.outputs.emoji }}
+            ${{ steps.check.outputs.emoji }} *ALERTA DE MONITOREO*
             
             *Estado:* ${{ steps.check.outputs.status }}
             
@@ -63,47 +62,3 @@ jobs:
             🔗 [Ver detalles](https://github.com/${{ github.repository }}/actions)
             
             _Arissta Uptime Monitor_
-```
-
----
-
-## 🎯 ¿Qué hace esta versión mejorada?
-
-### ✅ **Notifica AMBOS casos:**
-- 🔴 **Sitio CAÍDO** (UP → DOWN)
-- 🟢 **Sitio RECUPERADO** (DOWN → UP)
-
-### 🎨 **Mensajes personalizados:**
-- Emojis según el estado
-- Formato markdown (texto en negrita)
-- Link directo a GitHub Actions
-- Firma personalizada
-
----
-
-## 📱 Ejemplo de notificación:
-
-**Cuando un sitio cae:**
-```
-⚠️ ALERTA DE MONITOREO ⚠️
-
-Estado: 🔴 CAÍDO
-
-🔴 Arissta is down (0 in 0 ms)
-
-🔗 Ver detalles
-
-Arissta Uptime Monitor
-```
-
-**Cuando se recupera:**
-```
-✅ ALERTA DE MONITOREO ✅
-
-Estado: 🟢 RECUPERADO
-
-🟢 Arissta is back up (200 in 450 ms)
-
-🔗 Ver detalles
-
-Arissta Uptime Monitor
