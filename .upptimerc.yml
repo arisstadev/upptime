@@ -14,7 +14,7 @@ sites:
   - name: Thermo Ingeniería
     url: https://thermoingenieriayequipos.com
   - name: Test Google
-    url: https://www.google.com  # ← CAMBIAR de URL falsa a Google real
+    url: https://sitio-inexistente-prueba-alerta-999.com   # ← CAMBIAR de URL falsa a Google real
 
 status-website:
   baseUrl: /upptime
