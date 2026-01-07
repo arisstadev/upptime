@@ -13,6 +13,8 @@ sites:
     url: https://teamcld.com
   - name: thermoingeniería
     url: https://thermoingenieriayequipos.com
+  - name: Test Google
+    url: https://www.google.com
 
 status-website:
   baseUrl: /upptime
