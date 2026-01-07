@@ -14,7 +14,7 @@ sites:
   - name: thermoingeniería
     url: https://thermoingenieriayequipos.com
   - name: Test Google
-    url: https://www.google.com
+    url: https://sitio-que-no-existe-999888777.com
 
 status-website:
   baseUrl: /upptime
