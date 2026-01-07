@@ -3,18 +3,18 @@ owner: arisstadev
 repo: upptime
 
 sites:
-  - name: ajtm
+  - name: AJTM Frontend
     url: https://ajtm.com.mx
-  - name: arissta
+  - name: Arissta
     url: https://arissta.com
-  - name: mimeminerales
+  - name: MLM Minerales
     url: https://mimeminerales.com
-  - name: teamcld
+  - name: Team CLD
     url: https://teamcld.com
-  - name: thermoingeniería
+  - name: Thermo Ingeniería
     url: https://thermoingenieriayequipos.com
   - name: Test Google
-    url: https://sitio-que-no-existe-999888777.com
+    url: https://www.google.com  # ← CAMBIAR de URL falsa a Google real
 
 status-website:
   baseUrl: /upptime
