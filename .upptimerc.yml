@@ -6,7 +6,7 @@ sites:
   - name: AJTM Frontend
     url: https://ajtm.com.mx
   - name: Arissta
-    url: https://arissta_test.com
+    url: https://arissta.com
   - name: MLM Minerales
     url: https://mimeminerales.com
   - name: Team CLD
