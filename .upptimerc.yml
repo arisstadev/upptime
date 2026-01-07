@@ -3,15 +3,15 @@ owner: arisstadev
 repo: upptime
 
 sites:
-  - name: AJTM Frontend
+  - name: ajtm
     url: https://ajtm.com.mx
-  - name: Arissta
+  - name: arissta
     url: https://arissta.com
-  - name: MLM Minerales
-    url: https://mlmeminerales.com
-  - name: Team CLD
+  - name: mimeminerales
+    url: https://mimeminerales.com
+  - name: teamcld
     url: https://teamcld.com
-  - name: Thermo Ingeniería
+  - name: thermoingeniería
     url: https://thermoingenieriayequipos.com
 
 status-website:
