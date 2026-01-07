@@ -5,18 +5,14 @@ repo: upptime
 sites:
   - name: AJTM Frontend
     url: https://ajtm.com.mx
-  - name: AJTM Admin
-    url: https://admin-beige-three.vercel.app
   - name: Arissta
     url: https://arissta.com
-  - name: Loading Dock
-    url: https://lloadingdock.com
   - name: MLM Minerales
     url: https://mlmeminerales.com
   - name: Team CLD
     url: https://teamcld.com
   - name: Thermo Ingeniería
-    url: https://thermoingenieraylequipos.com
+    url: https://thermoingenieriayequipos.com
 
 status-website:
   baseUrl: /upptime
@@ -29,6 +25,12 @@ status-website:
       href: /
     - title: GitHub
       href: https://github.com/$OWNER/$REPO
+
+# Telegram notifications
+notifications:
+  - type: telegram
+    botToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    chatId: ${{ secrets.TELEGRAM_CHAT_ID }}
 
 # Telegram notifications
 notifications:
