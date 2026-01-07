@@ -31,9 +31,3 @@ notifications:
   - type: telegram
     botToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     chatId: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-# Telegram notifications
-notifications:
-  - type: telegram
-    botToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-    chatId: ${{ secrets.TELEGRAM_CHAT_ID }}
