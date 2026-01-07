@@ -14,11 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Get changed files
-        id: changes
-        run: |
-          git diff --name-only HEAD~1 HEAD | grep "history/" || echo "no-changes"
+        with:
+          fetch-depth: 2  # ← Fetch últimos 2 commits para comparar
 
       - name: Check for status changes
         id: check
@@ -27,7 +24,9 @@ jobs:
           if [ -n "$CHANGED_FILES" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
             LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-            echo "message=$LAST_COMMIT_MSG" >> $GITHUB_OUTPUT
+            echo "message<<EOF" >> $GITHUB_OUTPUT
+            echo "$LAST_COMMIT_MSG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
@@ -39,6 +38,8 @@ jobs:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            🔔 ${{ steps.check.outputs.message }}
+            🔔 Status Change Detected
+            
+            ${{ steps.check.outputs.message }}
             
             Repository: ${{ github.repository }}
