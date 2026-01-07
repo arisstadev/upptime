@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # ← Fetch últimos 2 commits para comparar
+          fetch-depth: 2
 
       - name: Check for status changes
         id: check
@@ -23,9 +23,24 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "history/" || echo "")
           if [ -n "$CHANGED_FILES" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
-            LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            # Detectar si es UP o DOWN
+            if echo "$COMMIT_MSG" | grep -q "is up"; then
+              STATUS="🟢 RECUPERADO"
+              EMOJI="✅"
+            elif echo "$COMMIT_MSG" | grep -q "is down"; then
+              STATUS="🔴 CAÍDO"
+              EMOJI="⚠️"
+            else
+              STATUS="📊 CAMBIO"
+              EMOJI="🔔"
+            fi
+            
+            echo "status=$STATUS" >> $GITHUB_OUTPUT
+            echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
             echo "message<<EOF" >> $GITHUB_OUTPUT
-            echo "$LAST_COMMIT_MSG" >> $GITHUB_OUTPUT
+            echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
@@ -37,9 +52,58 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: markdown
           message: |
-            🔔 Status Change Detected
+            ${{ steps.check.outputs.emoji }} *ALERTA DE MONITOREO* ${{ steps.check.outputs.emoji }}
+            
+            *Estado:* ${{ steps.check.outputs.status }}
             
             ${{ steps.check.outputs.message }}
             
-            Repository: ${{ github.repository }}
+            🔗 [Ver detalles](https://github.com/${{ github.repository }}/actions)
+            
+            _Arissta Uptime Monitor_
+```
+
+---
+
+## 🎯 ¿Qué hace esta versión mejorada?
+
+### ✅ **Notifica AMBOS casos:**
+- 🔴 **Sitio CAÍDO** (UP → DOWN)
+- 🟢 **Sitio RECUPERADO** (DOWN → UP)
+
+### 🎨 **Mensajes personalizados:**
+- Emojis según el estado
+- Formato markdown (texto en negrita)
+- Link directo a GitHub Actions
+- Firma personalizada
+
+---
+
+## 📱 Ejemplo de notificación:
+
+**Cuando un sitio cae:**
+```
+⚠️ ALERTA DE MONITOREO ⚠️
+
+Estado: 🔴 CAÍDO
+
+🔴 Arissta is down (0 in 0 ms)
+
+🔗 Ver detalles
+
+Arissta Uptime Monitor
+```
+
+**Cuando se recupera:**
+```
+✅ ALERTA DE MONITOREO ✅
+
+Estado: 🟢 RECUPERADO
+
+🟢 Arissta is back up (200 in 450 ms)
+
+🔗 Ver detalles
+
+Arissta Uptime Monitor
