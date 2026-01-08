@@ -13,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 10
+          fetch-depth: 2
           
       - name: Check for status changes
         id: check
@@ -22,12 +22,14 @@ jobs:
           if [ -n "$CHANGED_FILES" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
             
-            # Buscar en los últimos 5 commits por mensajes de estado
-            COMMIT_MSG=$(git log -5 --pretty=%B | grep -E "🟩.*is up|🟥.*is down" | head -1)
+            # Obtener SOLO el último commit (no los últimos 5)
+            COMMIT_MSG=$(git log -1 --pretty=%B)
             
-            # Si no encuentra, usar el último commit
-            if [ -z "$COMMIT_MSG" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B)
+            # Verificar que sea un commit de cambio de estado (no summary)
+            if ! echo "$COMMIT_MSG" | grep -qE "🟩.*is up|🟥.*is down"; then
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "No es un commit de cambio de estado"
+              exit 0
             fi
             
             # Extraer nombre del sitio
