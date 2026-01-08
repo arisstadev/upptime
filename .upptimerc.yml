@@ -13,6 +13,8 @@ sites:
     url: https://teamcld.com
   - name: Thermo Ingeniería
     url: https://thermoingenieriayequipos.com
+  - name: iloadingdock
+    url: https://iloadingdock.com
 
 status-website:
   baseUrl: /upptime
@@ -31,3 +33,7 @@ notifications:
   - type: telegram
     botToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     chatId: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+# Desactivar schedule automático de GitHub (usamos cron-job.org)
+workflowSchedule:
+  uptime: ""
