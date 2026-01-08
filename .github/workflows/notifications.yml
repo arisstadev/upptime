@@ -13,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 10
           
       - name: Check for status changes
         id: check
@@ -21,10 +21,17 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "history/" || echo "")
           if [ -n "$CHANGED_FILES" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
-            COMMIT_MSG=$(git log -1 --pretty=%B)
             
-            # Extraer nombre del sitio del commit
-            SITE_NAME=$(echo "$COMMIT_MSG" | grep -oP '(?<=🟩|🟥)\s+\K[^is]+(?=\s+is)' | xargs || echo "Sitio")
+            # Buscar en los últimos 5 commits por mensajes de estado
+            COMMIT_MSG=$(git log -5 --pretty=%B | grep -E "🟩.*is up|🟥.*is down" | head -1)
+            
+            # Si no encuentra, usar el último commit
+            if [ -z "$COMMIT_MSG" ]; then
+              COMMIT_MSG=$(git log -1 --pretty=%B)
+            fi
+            
+            # Extraer nombre del sitio
+            SITE_NAME=$(echo "$COMMIT_MSG" | sed -n 's/.*[🟩🟥] \(.*\) is.*/\1/p' | xargs || echo "Sitio")
             
             if echo "$COMMIT_MSG" | grep -qi "is up"; then
               STATUS="🟢 RECUPERADO"
