@@ -35,7 +35,7 @@ jobs:
           NOTIFICATIONS=""
           
           for file in $CHANGED_FILES; do
-            # Extraer nombre del sitio del archivo (ej: history/arissta.yml -> Arissta)
+            # Extraer nombre del sitio del archivo
             SITE_NAME=$(basename "$file" .yml | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1')
             
             # Obtener el status actual del archivo
@@ -69,7 +69,7 @@ jobs:
                 NOTIFICATIONS="$EMOJI|$STATUS|$SITE_NAME|$MESSAGE"
               else
                 NOTIFICATIONS="$NOTIFICATIONS
-$EMOJI|$STATUS|$SITE_NAME|$MESSAGE"
+          $EMOJI|$STATUS|$SITE_NAME|$MESSAGE"
               fi
             fi
           done
@@ -98,14 +98,14 @@ $EMOJI|$STATUS|$SITE_NAME|$MESSAGE"
               # Formatear mensaje para Telegram
               TELEGRAM_MESSAGE="$EMOJI *ALERTA DE MONITOREO*
 
-*Sitio:* $SITE
-*Estado:* $STATUS
+          *Sitio:* $SITE
+          *Estado:* $STATUS
 
-$MESSAGE
+          $MESSAGE
 
-🔗 [Ver detalles](https://github.com/${{ github.repository }}/actions)
+          🔗 [Ver detalles](https://github.com/${{ github.repository }}/actions)
 
-_Arissta Uptime Monitor_"
+          _Arissta Uptime Monitor_"
               
               # Enviar notificación
               curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
