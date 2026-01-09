@@ -1,9 +1,11 @@
 name: Notification CI
+
 on:
   workflow_run:
     workflows: ["Uptime CI"]
     types:
       - completed
+
 jobs:
   notify:
     name: Send notifications
@@ -15,53 +17,84 @@ jobs:
         with:
           fetch-depth: 10
           
-      - name: Check for status changes
+      - name: Check for status changes and persistence
         id: check
         run: |
-          # Buscar commit de estado en los últimos 5 commits
-          RECENT_COMMIT=$(git log -5 --oneline --grep="is up\|is down" | head -1)
+          # ======================================================
+          # 1. BUSCAR COMMIT RECIENTE Y VERIFICAR SU EDAD
+          # ======================================================
           
-          # Si encontró un commit de estado reciente
-          if [ -n "$RECENT_COMMIT" ]; then
-            COMMIT_HASH=$(echo "$RECENT_COMMIT" | awk '{print $1}')
-            COMMIT_MSG=$(git log -1 --pretty=%B "$COMMIT_HASH")
+          # Obtenemos Hash (%H), Timestamp (%ct) y Asunto (%s) del último commit de estado
+          RAW_COMMIT_DATA=$(git log -5 --format="%H %ct %s" --grep="is up\|is down" | head -1)
+          
+          if [ -n "$RAW_COMMIT_DATA" ]; then
+            # Extraer variables
+            COMMIT_HASH=$(echo "$RAW_COMMIT_DATA" | awk '{print $1}')
+            COMMIT_TS=$(echo "$RAW_COMMIT_DATA" | awk '{print $2}')
+            CURRENT_TS=$(date +%s)
             
-            echo "Commit encontrado: $COMMIT_MSG"
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            # Calcular edad del commit en segundos
+            AGE=$((CURRENT_TS - COMMIT_TS))
+            echo "🕒 El último commit de estado fue hace $AGE segundos."
             
-            # Extraer nombre del sitio
-            SITE_NAME=$(echo "$COMMIT_MSG" | sed -E 's/.*(🟩|🟥) (.*) is.*/\2/' | xargs)
-            
-            if echo "$COMMIT_MSG" | grep -q "is up"; then
-              STATUS="🟢 RECUPERADO"
-              EMOJI="✅"
-              MESSAGE="$SITE_NAME se ha recuperado y está funcionando correctamente"
-            elif echo "$COMMIT_MSG" | grep -q "is down"; then
-              STATUS="🔴 CAÍDO"
-              EMOJI="⚠️"
-              MESSAGE="$SITE_NAME está experimentando problemas y no responde"
-            else
-              echo "has_changes=false" >> $GITHUB_OUTPUT
+            # UMBRAL: 330 segundos (5 minutos + 30 seg de margen)
+            if [ "$AGE" -lt 330 ]; then
+              echo "✅ El cambio es FRESCO (< 5.5 min). Procesando alerta de cambio..."
+              
+              COMMIT_MSG=$(git log -1 --pretty=%B "$COMMIT_HASH")
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              
+              # Extraer nombre del sitio
+              SITE_NAME=$(echo "$COMMIT_MSG" | sed -E 's/.*(🟩|🟥) (.*) is.*/\2/' | xargs)
+              
+              if echo "$COMMIT_MSG" | grep -q "is up"; then
+                STATUS="🟢 RECUPERADO"
+                EMOJI="✅"
+                MESSAGE="$SITE_NAME se ha recuperado y está funcionando correctamente"
+              elif echo "$COMMIT_MSG" | grep -q "is down"; then
+                STATUS="🔴 CAÍDO"
+                EMOJI="⚠️"
+                MESSAGE="$SITE_NAME está experimentando problemas y no responde"
+              else
+                # Fallback por si acaso
+                echo "has_changes=false" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+              
+              # Salida de variables
+              echo "status=$STATUS" >> $GITHUB_OUTPUT
+              echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
+              echo "site=$SITE_NAME" >> $GITHUB_OUTPUT
+              echo "custom_message=$MESSAGE" >> $GITHUB_OUTPUT
+              echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+              
+              # IMPORTANTE: Si es un cambio fresco, terminamos aquí.
               exit 0
+            else
+              echo "⏳ El commit es ANTIGUO (> 5.5 min). Se ignora como evento nuevo."
             fi
-            
-            echo "status=$STATUS" >> $GITHUB_OUTPUT
-            echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
-            echo "site=$SITE_NAME" >> $GITHUB_OUTPUT
-            echo "custom_message=$MESSAGE" >> $GITHUB_OUTPUT
-            echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
-            exit 0
+          else
+             echo "∅ No se encontraron commits de estado en el historial reciente."
           fi
           
-          # Si NO encontró commit reciente, verificar sitios DOWN actuales
-          echo "No hay cambios recientes, verificando sitios caídos..."
+          # ======================================================
+          # 2. VERIFICAR PERSISTENCIA (SIGUE CAÍDO)
+          # ======================================================
+          # Si llegamos aquí, es porque NO hubo commit reciente (o era viejo).
+          # Ahora verificamos si hay algún sitio que siga 'down' en los archivos .yml
+          
+          echo "🔍 Verificando estado actual de los sitios..."
           DOWN_SITES=""
           
           for file in history/*.yml; do
             if [ -f "$file" ]; then
+              # Leer estado directamente del archivo YAML
               STATUS=$(grep "^  status:" "$file" | head -1 | awk '{print $2}')
+              
               if [ "$STATUS" = "down" ]; then
+                # Formatear nombre del sitio (ej: google-com -> Google Com)
                 SITE_NAME=$(basename "$file" .yml | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1')
+                
                 if [ -z "$DOWN_SITES" ]; then
                   DOWN_SITES="$SITE_NAME"
                 else
@@ -72,15 +105,18 @@ jobs:
           done
           
           if [ -n "$DOWN_SITES" ]; then
+            # HAY SITIOS CAÍDOS Y NO HUBO CAMBIO RECIENTE -> ALERTA DE PERSISTENCIA
+            echo "🚨 Se detectaron sitios que siguen caídos: $DOWN_SITES"
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "status=🔴 SIGUE CAÍDO" >> $GITHUB_OUTPUT
             echo "emoji=⚠️" >> $GITHUB_OUTPUT
             echo "site=$DOWN_SITES" >> $GITHUB_OUTPUT
             echo "custom_message=Los siguientes sitios continúan sin responder" >> $GITHUB_OUTPUT
-            echo "commit_msg=Verificación periódica de sitios caídos" >> $GITHUB_OUTPUT
+            echo "commit_msg=Verificación periódica de persistencia" >> $GITHUB_OUTPUT
           else
+            # TODO ESTÁ UP Y NO HUBO CAMBIOS RECIENTES -> SILENCIO
+            echo "✨ Todos los sitios están UP y estables. Sin notificaciones."
             echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "Todos los sitios están UP y estables"
           fi
           
       - name: Send Telegram notification
