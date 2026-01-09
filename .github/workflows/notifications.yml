@@ -18,47 +18,66 @@ jobs:
       - name: Check for status changes
         id: check
         run: |
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "history/" || echo "")
-          if [ -n "$CHANGED_FILES" ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+          # Buscar en los últimos 3 commits por mensajes de estado
+          COMMIT_MSG=$(git log -3 --pretty=%B | grep -E "🟩.*is up|🟥.*is down" | head -1)
+          
+          # Si no encuentra un commit de estado, verificar archivos de historia
+          if [ -z "$COMMIT_MSG" ]; then
+            # Verificar si algún sitio está DOWN actualmente
+            DOWN_SITES=""
+            for file in history/*.yml; do
+              if [ -f "$file" ]; then
+                STATUS=$(grep "^  status:" "$file" | head -1 | awk '{print $2}')
+                if [ "$STATUS" = "down" ]; then
+                  SITE_NAME=$(basename "$file" .yml | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1')
+                  if [ -z "$DOWN_SITES" ]; then
+                    DOWN_SITES="$SITE_NAME"
+                  else
+                    DOWN_SITES="$DOWN_SITES, $SITE_NAME"
+                  fi
+                fi
+              fi
+            done
             
-            # Buscar en los últimos 3 commits por mensajes de estado (excluyendo summary)
-            COMMIT_MSG=$(git log -3 --pretty=%B | grep -E "🟩.*is up|🟥.*is down" | head -1)
-            
-            # Si no encuentra un commit de estado, salir
-            if [ -z "$COMMIT_MSG" ]; then
-              echo "has_changes=false" >> $GITHUB_OUTPUT
-              echo "No se encontró commit de cambio de estado en los últimos 3 commits"
-              exit 0
-            fi
-            
-            # Extraer nombre del sitio
-            SITE_NAME=$(echo "$COMMIT_MSG" | sed -n 's/.*[🟩🟥] \(.*\) is.*/\1/p' | xargs || echo "Sitio")
-            
-            if echo "$COMMIT_MSG" | grep -qi "is up"; then
-              STATUS="🟢 RECUPERADO"
-              EMOJI="✅"
-              MESSAGE="$SITE_NAME se ha recuperado y está funcionando correctamente"
-            elif echo "$COMMIT_MSG" | grep -qi "is down"; then
-              STATUS="🔴 CAÍDO"
-              EMOJI="⚠️"
-              MESSAGE="$SITE_NAME está experimentando problemas y no responde"
+            if [ -n "$DOWN_SITES" ]; then
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "status=🔴 SIGUE CAÍDO" >> $GITHUB_OUTPUT
+              echo "emoji=⚠️" >> $GITHUB_OUTPUT
+              echo "site=$DOWN_SITES" >> $GITHUB_OUTPUT
+              echo "custom_message=Los siguientes sitios continúan sin responder" >> $GITHUB_OUTPUT
+              echo "commit_msg=Verificación periódica de sitios caídos" >> $GITHUB_OUTPUT
             else
-              STATUS="📊 CAMBIO"
-              EMOJI="🔔"
-              MESSAGE="Cambio detectado en el monitoreo"
+              echo "has_changes=false" >> $GITHUB_OUTPUT
             fi
-            
-            echo "status=$STATUS" >> $GITHUB_OUTPUT
-            echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
-            echo "site=$SITE_NAME" >> $GITHUB_OUTPUT
-            echo "custom_message=$MESSAGE" >> $GITHUB_OUTPUT
-            echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
-            echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
+          
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          
+          # Extraer nombre del sitio
+          SITE_NAME=$(echo "$COMMIT_MSG" | sed -n 's/.*[🟩🟥] \(.*\) is.*/\1/p' | xargs || echo "Sitio")
+          
+          if echo "$COMMIT_MSG" | grep -qi "is up"; then
+            STATUS="🟢 RECUPERADO"
+            EMOJI="✅"
+            MESSAGE="$SITE_NAME se ha recuperado y está funcionando correctamente"
+          elif echo "$COMMIT_MSG" | grep -qi "is down"; then
+            STATUS="🔴 CAÍDO"
+            EMOJI="⚠️"
+            MESSAGE="$SITE_NAME está experimentando problemas y no responde"
+          else
+            STATUS="📊 CAMBIO"
+            EMOJI="🔔"
+            MESSAGE="Cambio detectado en el monitoreo"
+          fi
+          
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
+          echo "site=$SITE_NAME" >> $GITHUB_OUTPUT
+          echo "custom_message=$MESSAGE" >> $GITHUB_OUTPUT
+          echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
           
       - name: Send Telegram notification
         if: steps.check.outputs.has_changes == 'true'
