@@ -13,20 +13,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 5
+          fetch-depth: 10
           
       - name: Check for status changes
         id: check
         run: |
-          # Verificar si hay archivos de history que cambiaron
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "^history/.*\.yml$" || echo "")
+          # Buscar commits de estado en los últimos 5 commits (no solo HEAD~1)
+          COMMIT_MSG=$(git log -5 --pretty=%B | grep -E "🟩.*is up|🟥.*is down" | head -1)
           
-          # Si hubo cambios en archivos de historia
-          if [ -n "$CHANGED_FILES" ]; then
-            # Buscar commits de estado en los últimos 3 commits
-            COMMIT_MSG=$(git log -3 --pretty=%B | grep -E "🟩.*is up|🟥.*is down" | head -1)
+          # Si encontró un commit de estado, verificar si es reciente (últimos 2 minutos)
+          if [ -n "$COMMIT_MSG" ]; then
+            # Obtener el hash del commit que contiene ese mensaje
+            COMMIT_HASH=$(git log -5 --pretty=%H --grep="$(echo "$COMMIT_MSG" | sed 's/[][()\.^$*+?{}|]/\\&/g')" | head -1)
             
-            if [ -n "$COMMIT_MSG" ]; then
+            # Obtener timestamp del commit
+            COMMIT_TIME=$(git show -s --format=%ct "$COMMIT_HASH")
+            CURRENT_TIME=$(date +%s)
+            TIME_DIFF=$((CURRENT_TIME - COMMIT_TIME))
+            
+            # Si el commit es de hace menos de 3 minutos (180 segundos)
+            if [ $TIME_DIFF -lt 180 ]; then
+              echo "Commit de estado encontrado hace $TIME_DIFF segundos"
               echo "has_changes=true" >> $GITHUB_OUTPUT
               
               # Extraer nombre del sitio
@@ -50,10 +57,12 @@ jobs:
               echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
               echo "EOF" >> $GITHUB_OUTPUT
               exit 0
+            else
+              echo "Commit de estado encontrado pero es antiguo (hace $TIME_DIFF segundos)"
             fi
           fi
           
-          # Si NO hubo cambios en history/, verificar sitios DOWN actuales
+          # Si NO encontró commit reciente, verificar sitios DOWN actuales
           echo "No hay cambios recientes, verificando sitios caídos..."
           DOWN_SITES=""
           
