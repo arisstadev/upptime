@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 50 # Aumentamos un poco el depth para asegurar historial
+          fetch-depth: 50 
           
       - name: Check for status changes and persistence
         id: check
@@ -23,17 +23,13 @@ jobs:
           # ======================================================
           # CONFIGURACIÓN
           # ======================================================
-          # Umbral de tiempo: 200 seg (3m 20s). 
-          # Cualquier commit más viejo que esto será IGNORADO como evento nuevo.
           TIME_THRESHOLD=200 
           
-          echo "⚙️ Iniciando verificación con umbral de $TIME_THRESHOLD segundos..."
+          echo "⚙️ Iniciando verificación..."
 
           # ======================================================
           # 1. BUSCAR COMMIT DE ESTADO Y VERIFICAR SU EDAD
           # ======================================================
-          # Buscamos el último commit que diga "is up" o "is down"
-          # %H = Hash, %ct = Timestamp Unix, %s = Mensaje
           RAW_COMMIT_DATA=$(git log -n 5 --format="%H %ct %s" --grep="is up\|is down" | head -1)
           
           IS_FRESH="false"
@@ -42,19 +38,15 @@ jobs:
             COMMIT_HASH=$(echo "$RAW_COMMIT_DATA" | awk '{print $1}')
             COMMIT_TS=$(echo "$RAW_COMMIT_DATA" | awk '{print $2}')
             CURRENT_TS=$(date +%s)
-            
-            # Calculamos cuántos segundos han pasado desde ese commit
             AGE=$((CURRENT_TS - COMMIT_TS))
             
-            echo "🕒 Último commit de estado encontrado hace $AGE segundos."
+            echo "🕒 Último commit encontrado hace $AGE segundos."
             
-            # SOLO procesamos si el commit ocurrió hace menos de 200 segundos
             if [ "$AGE" -lt "$TIME_THRESHOLD" ]; then
               echo "✅ El cambio es RECIENTE (< $TIME_THRESHOLD s). Se envía notificación."
               IS_FRESH="true"
               
               COMMIT_MSG=$(git log -1 --pretty=%B "$COMMIT_HASH")
-              # Extraer nombre del sitio limpiamente
               SITE_NAME=$(echo "$COMMIT_MSG" | sed -E 's/.*(🟩|🟥) (.*) is.*/\2/' | xargs)
               
               if echo "$COMMIT_MSG" | grep -q "is up"; then
@@ -73,35 +65,32 @@ jobs:
               echo "site=$SITE_NAME" >> $GITHUB_OUTPUT
               echo "custom_message=$MESSAGE" >> $GITHUB_OUTPUT
               echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
-              
-              # Importante: Si es un cambio nuevo, terminamos aquí para no duplicar lógica
               exit 0
             else
-              echo "⏳ El commit encontrado es ANTIGUO (> $TIME_THRESHOLD s). Se ignora."
+              echo "⏳ El commit es ANTIGUO (> $TIME_THRESHOLD s). Pasando a verificar persistencia."
             fi
           else
-             echo "∅ No se encontraron commits de estado en el historial reciente."
+             echo "∅ No se encontraron commits recientes. Pasando a verificar persistencia."
           fi
           
           # ======================================================
           # 2. VERIFICAR PERSISTENCIA (SIGUE CAÍDO)
           # ======================================================
-          # Esta sección solo corre si NO hubo un cambio reciente.
-          # Verifica si los archivos .yml dicen "down".
-          
-          echo "🔍 Verificando persistencia en archivos history/*.yml ..."
+          echo "🔍 Verificando history/*.yml ..."
           DOWN_SITES=""
           
           for file in history/*.yml; do
             if [ -f "$file" ]; then
-              # Leemos el estado limpiando espacios y comillas
-              STATUS_VAL=$(grep "^  status:" "$file" | head -1 | cut -d ':' -f 2 | tr -d ' "[:space:]')
+              # LÓGICA MEJORADA DE LECTURA:
+              # 1. Busca cualquier línea que contenga "status:" (sin importar espacios al inicio)
+              # 2. Elimina la palabra "status:"
+              # 3. Elimina comillas dobles, simples y todos los espacios
+              STATUS_VAL=$(grep "status:" "$file" | head -1 | sed 's/status://g' | tr -d ' "[:space:]' | tr -d "'")
               
-              # Debug: muestra qué estado está leyendo de cada archivo
-              # echo "   📄 $(basename $file) -> [$STATUS_VAL]"
+              # Debug para ver qué lee exactamente
+              echo "   📄 $(basename $file) -> Leído: [$STATUS_VAL]"
               
               if [ "$STATUS_VAL" = "down" ]; then
-                # Formatear nombre del sitio
                 SITE_NAME=$(basename "$file" .yml | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1')
                 
                 if [ -z "$DOWN_SITES" ]; then
@@ -114,15 +103,15 @@ jobs:
           done
           
           if [ -n "$DOWN_SITES" ]; then
-            echo "🚨 ALERTA: Sitios persistentes en DOWN: $DOWN_SITES"
+            echo "🚨 DETECTADO: $DOWN_SITES sigue caído."
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "status=🔴 SIGUE CAÍDO" >> $GITHUB_OUTPUT
             echo "emoji=⚠️" >> $GITHUB_OUTPUT
             echo "site=$DOWN_SITES" >> $GITHUB_OUTPUT
             echo "custom_message=Los siguientes sitios continúan sin responder" >> $GITHUB_OUTPUT
-            echo "commit_msg=Verificación periódica de persistencia" >> $GITHUB_OUTPUT
+            echo "commit_msg=Alerta continua cada 5 min mientras persista el error" >> $GITHUB_OUTPUT
           else
-            echo "✨ Todos los sitios están UP. No se envían notificaciones."
+            echo "✨ Todos los sitios leídos están UP."
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
           
