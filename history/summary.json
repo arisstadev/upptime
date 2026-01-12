@@ -94,17 +94,17 @@
     "url": "https://iloadingdock.com",
     "icon": "https://icons.duckduckgo.com/ip3/iloadingdock.com.ico",
     "slug": "iloadingdock",
-    "status": "down",
+    "status": "up",
     "uptime": "100.00%",
     "uptimeDay": "100.00%",
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 227,
-    "timeDay": 217,
-    "timeWeek": 227,
-    "timeMonth": 227,
-    "timeYear": 227,
+    "time": 247,
+    "timeDay": 338,
+    "timeWeek": 247,
+    "timeMonth": 247,
+    "timeYear": 247,
     "dailyMinutesDown": {}
   }
 ]
