@@ -36,21 +36,21 @@
     "dailyMinutesDown": {}
   },
   {
-    "name": "MLM Minerales",
+    "name": "MIME Minerales",
     "url": "https://mimeminerales.com",
     "icon": "https://icons.duckduckgo.com/ip3/mimeminerales.com.ico",
-    "slug": "mlm-minerales",
+    "slug": "mime-minerales",
     "status": "up",
     "uptime": "100.00%",
     "uptimeDay": "100.00%",
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 685,
-    "timeDay": 772,
-    "timeWeek": 636,
-    "timeMonth": 671,
-    "timeYear": 685,
+    "time": 445,
+    "timeDay": 445,
+    "timeWeek": 445,
+    "timeMonth": 445,
+    "timeYear": 445,
     "dailyMinutesDown": {}
   },
   {
@@ -105,6 +105,24 @@
     "timeWeek": 280,
     "timeMonth": 306,
     "timeYear": 280,
+    "dailyMinutesDown": {}
+  },
+  {
+    "name": "MIME Backend API",
+    "url": "https://api-core7.mimeminerales.com/health",
+    "icon": "https://icons.duckduckgo.com/ip3/api-core7.mimeminerales.com.ico",
+    "slug": "mime-backend-api",
+    "status": "up",
+    "uptime": "100.00%",
+    "uptimeDay": "100.00%",
+    "uptimeWeek": "100.00%",
+    "uptimeMonth": "100.00%",
+    "uptimeYear": "100.00%",
+    "time": 600,
+    "timeDay": 600,
+    "timeWeek": 600,
+    "timeMonth": 600,
+    "timeYear": 600,
     "dailyMinutesDown": {}
   }
 ]
