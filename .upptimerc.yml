@@ -7,7 +7,7 @@ sites:
     url: https://ajtm.com.mx
   - name: Arissta
     url: https://arissta.com
-  - name: MLM Minerales
+  - name: MIME Minerales
     url: https://mimeminerales.com
   - name: Team CLD
     url: https://teamcld.com
@@ -15,6 +15,8 @@ sites:
     url: https://thermoingenieriayequipos.com
   - name: iloadingdock
     url: https://iloadingdock.com
+  - name: MIME Backend API
+    url: https://api-core7.mimeminerales.com/health
 
 status-website:
   baseUrl: /upptime
