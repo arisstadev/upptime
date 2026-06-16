@@ -15,6 +15,16 @@ sites:
     url: https://thermoingenieriayequipos.com
   - name: MIME Backend API
     url: https://api-core7.mimeminerales.com/health
+  - name: Gine Palafox Juriquilla
+    url: https://ginepalafoxjuriquilla.com
+  - name: Manolo de la Barquera
+    url: https://manolodelabarquera.com
+  - name: Carpintería Mobel
+    url: https://carpinteriamobel.com
+  - name: Salsas y Productos Hervi
+    url: https://salsasyproductoshervi.com
+  - name: Monte Horeb
+    url: https://www.montehoreb.com.mx
 
 status-website:
   baseUrl: /upptime
