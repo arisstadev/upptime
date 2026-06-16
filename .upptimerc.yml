@@ -15,6 +15,8 @@ sites:
     url: https://thermoingenieriayequipos.com
   - name: MIME Backend API
     url: https://api-core7.mimeminerales.com/health
+  - name: TEST ALERTA (borrar)
+    url: https://api-core7.mimeminerales.com/endpoint-que-no-existe
 
 status-website:
   baseUrl: /upptime
