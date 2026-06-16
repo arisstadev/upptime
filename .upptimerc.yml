@@ -13,8 +13,6 @@ sites:
     url: https://teamcld.com
   - name: Thermo Ingeniería
     url: https://thermoingenieriayequipos.com
-  - name: iloadingdock
-    url: https://iloadingdock.com
   - name: MIME Backend API
     url: https://api-core7.mimeminerales.com/health
 
