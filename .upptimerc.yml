@@ -11,6 +11,8 @@ sites:
     url: https://mimeminerales.com
   - name: Team CLD
     url: https://teamcld.com
+  - name: TeamCLD Backend API
+    url: https://api.teamcld.com/api/health
   - name: Thermo Ingeniería
     url: https://thermoingenieriayequipos.com
   - name: MIME Backend API
