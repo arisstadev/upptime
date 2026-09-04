@@ -66,7 +66,7 @@
     "uptimeYear": "100.00%",
     "time": 821,
     "timeDay": 0,
-    "timeWeek": 618,
+    "timeWeek": 0,
     "timeMonth": 618,
     "timeYear": 821,
     "dailyMinutesDown": {}
@@ -84,7 +84,7 @@
     "uptimeYear": "100.00%",
     "time": 474,
     "timeDay": 0,
-    "timeWeek": 533,
+    "timeWeek": 0,
     "timeMonth": 474,
     "timeYear": 474,
     "dailyMinutesDown": {}
@@ -184,17 +184,17 @@
     "url": "https://www.montehoreb.com.mx",
     "icon": "https://icons.duckduckgo.com/ip3/www.montehoreb.com.mx.ico",
     "slug": "monte-horeb",
-    "status": "down",
+    "status": "up",
     "uptime": "100.00%",
     "uptimeDay": "100.00%",
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
     "uptimeYear": "100.00%",
-    "time": 195,
-    "timeDay": 0,
-    "timeWeek": 0,
-    "timeMonth": 0,
-    "timeYear": 195,
+    "time": 271,
+    "timeDay": 422,
+    "timeWeek": 422,
+    "timeMonth": 422,
+    "timeYear": 271,
     "dailyMinutesDown": {}
   }
 ]
