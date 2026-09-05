@@ -196,5 +196,23 @@
     "timeMonth": 422,
     "timeYear": 271,
     "dailyMinutesDown": {}
+  },
+  {
+    "name": "Test Alerta",
+    "url": "https://test-alerta-arissta.invalid",
+    "icon": "https://icons.duckduckgo.com/ip3/test-alerta-arissta.invalid.ico",
+    "slug": "test-alerta",
+    "status": "down",
+    "uptime": "100.00%",
+    "uptimeDay": "100.00%",
+    "uptimeWeek": "100.00%",
+    "uptimeMonth": "100.00%",
+    "uptimeYear": "100.00%",
+    "time": 0,
+    "timeDay": 0,
+    "timeWeek": 0,
+    "timeMonth": 0,
+    "timeYear": 0,
+    "dailyMinutesDown": {}
   }
 ]
