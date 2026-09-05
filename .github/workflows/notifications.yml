@@ -155,6 +155,20 @@ jobs:
           # ============================================================
           # 2. PERSISTENCIA CON ESCALAMIENTO
           # ============================================================
+          # Sitios vigentes segun .upptimerc.yml, como "url|Nombre".
+          # Asi ignoramos history/*.yml huerfanos de sitios ya eliminados.
+          CONFIG_PAIRS=$(awk '
+            /^sites:/ { ins=1; next }
+            /^[^ #-]/ { ins=0 }
+            ins && /^[[:space:]]*-[[:space:]]*name:/ {
+              n=$0; sub(/^[[:space:]]*-[[:space:]]*name:[[:space:]]*/,"",n); gsub(/^"|"$/,"",n)
+            }
+            ins && /^[[:space:]]*url:/ {
+              u=$0; sub(/^[[:space:]]*url:[[:space:]]*/,"",u); gsub(/^"|"$/,"",u)
+              if (n != "") { print u "|" n; n="" }
+            }
+          ' .upptimerc.yml)
+
           LISTA=""
           MIN_EVERY=0
 
@@ -165,7 +179,16 @@ jobs:
               | sed 's/status://' | tr -d ' "'\''' || true)
             [ "$STATUS_VAL" = "down" ] || continue
 
-            SITE=$(site_from_file "$file")
+            # ¿Sigue en la configuracion? Comparamos por URL, no por nombre de archivo.
+            FURL=$(grep -m1 '^url:' "$file" | sed 's/^url:[[:space:]]*//' | tr -d ' "'\''' || true)
+            MATCH=$(echo "$CONFIG_PAIRS" | grep -F -m1 "${FURL}|" || true)
+            if [ -z "$MATCH" ]; then
+              echo "    $(site_from_file "$file"): ya no esta en .upptimerc.yml -> ignorado"
+              continue
+            fi
+
+            # Nombre exacto de la config (evita 'Team Cld Backend Api')
+            SITE="${MATCH#*|}"
             DOWN_TS=$(git log -1 --format=%ct -- "$file" 2>/dev/null || true)
 
             if [ -z "$DOWN_TS" ]; then
