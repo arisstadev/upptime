@@ -28,21 +28,22 @@ jobs:
           FRESH_WINDOW=240        # seg. Ventana para considerar un commit "recien hecho"
           RUN_INTERVAL=5          # min. Cada cuanto corre Uptime CI
 
-          # Escalamiento: (minutos_caido_hasta, intervalo_de_alerta_en_min)
+          # Escalamiento
           ESC_1_UNTIL=30;  ESC_1_EVERY=5
           ESC_2_UNTIL=120; ESC_2_EVERY=20
-          ESC_3_EVERY=60          # de ESC_2_UNTIL en adelante
+          ESC_3_EVERY=60
 
+          FIRMA="_Arissta Uptime Monitor_"
+
+          NL=$'\n'
           NOW=$(date +%s)
 
           # ============================================================
           # HELPERS
           # ============================================================
 
-          # Convierte segundos a texto humano: "hace 25 min" / "hace 3 h" / "hace 2 d"
           humanize() {
-            local secs=$1
-            local mins=$((secs / 60))
+            local mins=$1
             if [ "$mins" -lt 60 ]; then
               echo "hace ${mins} min"
             elif [ "$mins" -lt 1440 ]; then
@@ -52,38 +53,34 @@ jobs:
             fi
           }
 
-          # Extrae el nombre del sitio del mensaje de commit de Upptime
-          # Ej: "🟩 Monte Horeb is up (200 in 422 ms) [skip ci] [upptime]" -> "Monte Horeb"
+          # "🟩 Monte Horeb is up (200 in 422 ms) [skip ci]" -> "Monte Horeb"
           site_from_commit() {
             echo "$1" | sed -E 's/^[^A-Za-z0-9]*//' | sed -E 's/ is (up|down).*//' | xargs
           }
 
-          # Extrae "200 · 422ms" del mensaje de commit
-          metrics_from_commit() {
-            local msg="$1"
-            local inner
-            inner=$(echo "$msg" | sed -nE 's/.*\(([^)]*)\).*/\1/p')
-            if [ -n "$inner" ]; then
-              # "200 in 422 ms" -> "200 · 422ms"
-              echo "$inner" | sed -E 's/ in /  ·  /; s/ ms/ms/'
-            else
-              echo ""
-            fi
-          }
-
-          # Nombre legible a partir del filename: monte-horeb.yml -> Monte Horeb
+          # monte-horeb.yml -> Monte Horeb
           site_from_file() {
             basename "$1" .yml | sed 's/-/ /g' \
               | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1'
           }
 
+          emit() {
+            {
+              echo "send=true"
+              echo "message<<TGEOF"
+              echo "$1"
+              echo "TGEOF"
+            } >> "$GITHUB_OUTPUT"
+          }
+
           # ============================================================
-          # 1. CAMBIOS DE ESTADO RECIENTES (caida nueva o recuperacion)
+          # 1. CAMBIOS DE ESTADO RECIENTES
           # ============================================================
           echo "==> Buscando cambios de estado recientes..."
 
-          FRESH_DOWN=""
-          FRESH_UP=""
+          SEEN="|"
+          DOWN_SITES=""; DOWN_MSGS=""
+          UP_SITES="";   UP_MSGS=""
 
           while IFS='|' read -r ts msg; do
             [ -z "${ts:-}" ] && continue
@@ -93,54 +90,62 @@ jobs:
             SITE=$(site_from_commit "$msg")
             [ -z "$SITE" ] && continue
 
+            # git log viene de mas nuevo a mas viejo: solo cuenta el 1er estado por sitio
+            case "|${SEEN}" in *"|${SITE}|"*) continue ;; esac
+            SEEN="${SEEN}${SITE}|"
+
             if echo "$msg" | grep -q " is up"; then
-              METRICS=$(metrics_from_commit "$msg")
-              FRESH_UP="${FRESH_UP}${SITE}|${METRICS}"$'\n'
+              UP_SITES="${UP_SITES:+$UP_SITES, }${SITE}"
+              UP_MSGS="${UP_MSGS:+$UP_MSGS$NL}${msg}"
               echo "    RECUPERADO: $SITE"
             elif echo "$msg" | grep -q " is down"; then
-              FRESH_DOWN="${FRESH_DOWN}${SITE}"$'\n'
+              DOWN_SITES="${DOWN_SITES:+$DOWN_SITES, }${SITE}"
+              DOWN_MSGS="${DOWN_MSGS:+$DOWN_MSGS$NL}${msg}"
               echo "    CAIDO: $SITE"
             fi
           done < <(git log -n 30 --format="%ct|%s" | grep -E " is (up|down)" || true)
 
-          # --- Construir mensaje de cambios ---
-          if [ -n "$FRESH_UP" ] || [ -n "$FRESH_DOWN" ]; then
-            MSG=""
+          BLOQUES=""
 
-            if [ -n "$FRESH_DOWN" ]; then
-              COUNT=$(echo "$FRESH_DOWN" | grep -c . || true)
-              if [ "$COUNT" -eq 1 ]; then
-                MSG="🔴 *$(echo "$FRESH_DOWN" | head -1)* caído"$'\n'"Sin respuesta"
-              else
-                MSG="🔴 *${COUNT} sitios caídos*"
-                while read -r s; do
-                  [ -n "$s" ] && MSG="${MSG}"$'\n'"• ${s}"
-                done <<< "$FRESH_DOWN"
-              fi
+          if [ -n "$DOWN_SITES" ]; then
+            if echo "$DOWN_SITES" | grep -q ", "; then
+              TXT="Los siguientes sitios están experimentando problemas y no responden"
+            else
+              TXT="${DOWN_SITES} está experimentando problemas y no responde"
             fi
+            BLOQUES="⚠️ *ALERTA DE MONITOREO*
 
-            if [ -n "$FRESH_UP" ]; then
-              [ -n "$MSG" ] && MSG="${MSG}"$'\n\n'
-              COUNT=$(echo "$FRESH_UP" | grep -c . || true)
-              if [ "$COUNT" -eq 1 ]; then
-                LINE=$(echo "$FRESH_UP" | head -1)
-                S="${LINE%%|*}"; M="${LINE#*|}"
-                MSG="${MSG}🟢 *${S}* recuperado"
-                [ -n "$M" ] && MSG="${MSG}"$'\n'"${M}"
-              else
-                MSG="${MSG}🟢 *${COUNT} sitios recuperados*"
-                while IFS='|' read -r s m; do
-                  [ -n "$s" ] && MSG="${MSG}"$'\n'"• ${s}"
-                done <<< "$FRESH_UP"
-              fi
+          *Sitio:* ${DOWN_SITES}
+          *Estado:* 🔴 CAÍDO
+
+          ${TXT}
+
+          📋 _${DOWN_MSGS}_
+
+          ${FIRMA}"
+          fi
+
+          if [ -n "$UP_SITES" ]; then
+            if echo "$UP_SITES" | grep -q ", "; then
+              TXT="Los siguientes sitios se han recuperado y funcionan correctamente"
+            else
+              TXT="${UP_SITES} se ha recuperado y está funcionando correctamente"
             fi
+            BLOQUE_UP="✅ *ALERTA DE MONITOREO*
 
-            {
-              echo "send=true"
-              echo "message<<TGEOF"
-              echo "$MSG"
-              echo "TGEOF"
-            } >> "$GITHUB_OUTPUT"
+          *Sitio:* ${UP_SITES}
+          *Estado:* 🟢 RECUPERADO
+
+          ${TXT}
+
+          📋 _${UP_MSGS}_
+
+          ${FIRMA}"
+            BLOQUES="${BLOQUES:+$BLOQUES$NL$NL}${BLOQUE_UP}"
+          fi
+
+          if [ -n "$BLOQUES" ]; then
+            emit "$BLOQUES"
             echo "==> Notificando cambio de estado."
             exit 0
           fi
@@ -150,7 +155,8 @@ jobs:
           # ============================================================
           # 2. PERSISTENCIA CON ESCALAMIENTO
           # ============================================================
-          DOWN_LINES=""
+          LISTA=""
+          MIN_EVERY=0
 
           for file in history/*.yml; do
             [ -f "$file" ] || continue
@@ -160,57 +166,52 @@ jobs:
             [ "$STATUS_VAL" = "down" ] || continue
 
             SITE=$(site_from_file "$file")
-
-            # El ultimo commit que toco este archivo = momento de la caida
             DOWN_TS=$(git log -1 --format=%ct -- "$file" 2>/dev/null || true)
 
             if [ -z "$DOWN_TS" ]; then
-              echo "    $SITE: sin historial en el clon, uso intervalo largo."
               DOWN_MIN=999999
             else
               DOWN_MIN=$(( (NOW - DOWN_TS) / 60 ))
             fi
 
-            # Elegir intervalo segun antiguedad
             if   [ "$DOWN_MIN" -lt "$ESC_1_UNTIL" ]; then EVERY=$ESC_1_EVERY
             elif [ "$DOWN_MIN" -lt "$ESC_2_UNTIL" ]; then EVERY=$ESC_2_EVERY
             else                                          EVERY=$ESC_3_EVERY
             fi
 
-            # ¿Toca alertar en esta corrida?
             if [ $((DOWN_MIN % EVERY)) -lt "$RUN_INTERVAL" ]; then
-              AGE_TXT=$(humanize $((DOWN_MIN * 60)))
-              DOWN_LINES="${DOWN_LINES}${SITE}|${AGE_TXT}"$'\n'
+              LISTA="${LISTA:+$LISTA, }${SITE} ($(humanize $DOWN_MIN))"
+              if [ "$MIN_EVERY" -eq 0 ] || [ "$EVERY" -lt "$MIN_EVERY" ]; then
+                MIN_EVERY=$EVERY
+              fi
               echo "    $SITE: caido ${DOWN_MIN}min (cada ${EVERY}min) -> ALERTA"
             else
               echo "    $SITE: caido ${DOWN_MIN}min (cada ${EVERY}min) -> silencio"
             fi
           done
 
-          if [ -z "$DOWN_LINES" ]; then
+          if [ -z "$LISTA" ]; then
             echo "send=false" >> "$GITHUB_OUTPUT"
             echo "==> Nada que notificar."
             exit 0
           fi
 
-          COUNT=$(echo "$DOWN_LINES" | grep -c . || true)
-          if [ "$COUNT" -eq 1 ]; then
-            LINE=$(echo "$DOWN_LINES" | head -1)
-            S="${LINE%%|*}"; A="${LINE#*|}"
-            MSG="🔴 *${S}* caído"$'\n'"Sin respuesta  ·  ${A}"
+          if [ "$MIN_EVERY" -ge 60 ]; then
+            FREQ="cada $((MIN_EVERY / 60)) h"
           else
-            MSG="🔴 *${COUNT} sitios caídos*"
-            while IFS='|' read -r s a; do
-              [ -n "$s" ] && MSG="${MSG}"$'\n'"• ${s}  ·  ${a}"
-            done <<< "$DOWN_LINES"
+            FREQ="cada ${MIN_EVERY} min"
           fi
 
-          {
-            echo "send=true"
-            echo "message<<TGEOF"
-            echo "$MSG"
-            echo "TGEOF"
-          } >> "$GITHUB_OUTPUT"
+          emit "⚠️ *ALERTA DE MONITOREO*
+
+          *Sitio:* ${LISTA}
+          *Estado:* 🔴 SIGUE CAÍDO
+
+          Los siguientes sitios continúan sin responder
+
+          📋 _Alerta ${FREQ} mientras persista el error_
+
+          ${FIRMA}"
 
       - name: Send Telegram notification
         if: steps.check.outputs.send == 'true'
