@@ -15,123 +15,209 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 50 
-          
-      - name: Check for status changes and persistence
+          fetch-depth: 300
+
+      - name: Evaluar estado y decidir notificacion
         id: check
         run: |
-          # ======================================================
-          # CONFIGURACIÓN
-          # ======================================================
-          TIME_THRESHOLD=200 
-          
-          echo "⚙️ Iniciando verificación..."
+          set -euo pipefail
 
-          # ======================================================
-          # 1. BUSCAR COMMIT DE ESTADO Y VERIFICAR SU EDAD
-          # ======================================================
-          RAW_COMMIT_DATA=$(git log -n 5 --format="%H %ct %s" --grep="is up\|is down" | head -1)
-          
-          IS_FRESH="false"
-          
-          if [ -n "$RAW_COMMIT_DATA" ]; then
-            COMMIT_HASH=$(echo "$RAW_COMMIT_DATA" | awk '{print $1}')
-            COMMIT_TS=$(echo "$RAW_COMMIT_DATA" | awk '{print $2}')
-            CURRENT_TS=$(date +%s)
-            AGE=$((CURRENT_TS - COMMIT_TS))
-            
-            echo "🕒 Último commit encontrado hace $AGE segundos."
-            
-            if [ "$AGE" -lt "$TIME_THRESHOLD" ]; then
-              echo "✅ El cambio es RECIENTE (< $TIME_THRESHOLD s). Se envía notificación."
-              IS_FRESH="true"
-              
-              COMMIT_MSG=$(git log -1 --pretty=%B "$COMMIT_HASH")
-              SITE_NAME=$(echo "$COMMIT_MSG" | sed -E 's/.*(🟩|🟥) (.*) is.*/\2/' | xargs)
-              
-              if echo "$COMMIT_MSG" | grep -q "is up"; then
-                STATUS="🟢 RECUPERADO"
-                EMOJI="✅"
-                MESSAGE="$SITE_NAME se ha recuperado y está funcionando correctamente"
-              else
-                STATUS="🔴 CAÍDO"
-                EMOJI="⚠️"
-                MESSAGE="$SITE_NAME está experimentando problemas y no responde"
-              fi
-              
-              echo "has_changes=true" >> $GITHUB_OUTPUT
-              echo "status=$STATUS" >> $GITHUB_OUTPUT
-              echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
-              echo "site=$SITE_NAME" >> $GITHUB_OUTPUT
-              echo "custom_message=$MESSAGE" >> $GITHUB_OUTPUT
-              echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
-              exit 0
+          # ============================================================
+          # CONFIGURACION
+          # ============================================================
+          FRESH_WINDOW=240        # seg. Ventana para considerar un commit "recien hecho"
+          RUN_INTERVAL=5          # min. Cada cuanto corre Uptime CI
+
+          # Escalamiento: (minutos_caido_hasta, intervalo_de_alerta_en_min)
+          ESC_1_UNTIL=30;  ESC_1_EVERY=5
+          ESC_2_UNTIL=120; ESC_2_EVERY=20
+          ESC_3_EVERY=60          # de ESC_2_UNTIL en adelante
+
+          NOW=$(date +%s)
+
+          # ============================================================
+          # HELPERS
+          # ============================================================
+
+          # Convierte segundos a texto humano: "hace 25 min" / "hace 3 h" / "hace 2 d"
+          humanize() {
+            local secs=$1
+            local mins=$((secs / 60))
+            if [ "$mins" -lt 60 ]; then
+              echo "hace ${mins} min"
+            elif [ "$mins" -lt 1440 ]; then
+              echo "hace $((mins / 60)) h"
             else
-              echo "⏳ El commit es ANTIGUO (> $TIME_THRESHOLD s). Pasando a verificar persistencia."
+              echo "hace $((mins / 1440)) d"
             fi
-          else
-             echo "∅ No se encontraron commits recientes. Pasando a verificar persistencia."
-          fi
-          
-          # ======================================================
-          # 2. VERIFICAR PERSISTENCIA (SIGUE CAÍDO)
-          # ======================================================
-          echo "🔍 Verificando history/*.yml ..."
-          DOWN_SITES=""
-          
-          for file in history/*.yml; do
-            if [ -f "$file" ]; then
-              # LÓGICA MEJORADA DE LECTURA:
-              # 1. Busca cualquier línea que contenga "status:" (sin importar espacios al inicio)
-              # 2. Elimina la palabra "status:"
-              # 3. Elimina comillas dobles, simples y todos los espacios
-              STATUS_VAL=$(grep "status:" "$file" | head -1 | sed 's/status://g' | tr -d ' "[:space:]' | tr -d "'")
-              
-              # Debug para ver qué lee exactamente
-              echo "   📄 $(basename $file) -> Leído: [$STATUS_VAL]"
-              
-              if [ "$STATUS_VAL" = "down" ]; then
-                SITE_NAME=$(basename "$file" .yml | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1')
-                
-                if [ -z "$DOWN_SITES" ]; then
-                  DOWN_SITES="$SITE_NAME"
-                else
-                  DOWN_SITES="$DOWN_SITES, $SITE_NAME"
-                fi
+          }
+
+          # Extrae el nombre del sitio del mensaje de commit de Upptime
+          # Ej: "🟩 Monte Horeb is up (200 in 422 ms) [skip ci] [upptime]" -> "Monte Horeb"
+          site_from_commit() {
+            echo "$1" | sed -E 's/^[^A-Za-z0-9]*//' | sed -E 's/ is (up|down).*//' | xargs
+          }
+
+          # Extrae "200 · 422ms" del mensaje de commit
+          metrics_from_commit() {
+            local msg="$1"
+            local inner
+            inner=$(echo "$msg" | sed -nE 's/.*\(([^)]*)\).*/\1/p')
+            if [ -n "$inner" ]; then
+              # "200 in 422 ms" -> "200 · 422ms"
+              echo "$inner" | sed -E 's/ in /  ·  /; s/ ms/ms/'
+            else
+              echo ""
+            fi
+          }
+
+          # Nombre legible a partir del filename: monte-horeb.yml -> Monte Horeb
+          site_from_file() {
+            basename "$1" .yml | sed 's/-/ /g' \
+              | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1'
+          }
+
+          # ============================================================
+          # 1. CAMBIOS DE ESTADO RECIENTES (caida nueva o recuperacion)
+          # ============================================================
+          echo "==> Buscando cambios de estado recientes..."
+
+          FRESH_DOWN=""
+          FRESH_UP=""
+
+          while IFS='|' read -r ts msg; do
+            [ -z "${ts:-}" ] && continue
+            AGE=$((NOW - ts))
+            [ "$AGE" -gt "$FRESH_WINDOW" ] && continue
+
+            SITE=$(site_from_commit "$msg")
+            [ -z "$SITE" ] && continue
+
+            if echo "$msg" | grep -q " is up"; then
+              METRICS=$(metrics_from_commit "$msg")
+              FRESH_UP="${FRESH_UP}${SITE}|${METRICS}"$'\n'
+              echo "    RECUPERADO: $SITE"
+            elif echo "$msg" | grep -q " is down"; then
+              FRESH_DOWN="${FRESH_DOWN}${SITE}"$'\n'
+              echo "    CAIDO: $SITE"
+            fi
+          done < <(git log -n 30 --format="%ct|%s" | grep -E " is (up|down)" || true)
+
+          # --- Construir mensaje de cambios ---
+          if [ -n "$FRESH_UP" ] || [ -n "$FRESH_DOWN" ]; then
+            MSG=""
+
+            if [ -n "$FRESH_DOWN" ]; then
+              COUNT=$(echo "$FRESH_DOWN" | grep -c . || true)
+              if [ "$COUNT" -eq 1 ]; then
+                MSG="🔴 *$(echo "$FRESH_DOWN" | head -1)* caído"$'\n'"Sin respuesta"
+              else
+                MSG="🔴 *${COUNT} sitios caídos*"
+                while read -r s; do
+                  [ -n "$s" ] && MSG="${MSG}"$'\n'"• ${s}"
+                done <<< "$FRESH_DOWN"
               fi
+            fi
+
+            if [ -n "$FRESH_UP" ]; then
+              [ -n "$MSG" ] && MSG="${MSG}"$'\n\n'
+              COUNT=$(echo "$FRESH_UP" | grep -c . || true)
+              if [ "$COUNT" -eq 1 ]; then
+                LINE=$(echo "$FRESH_UP" | head -1)
+                S="${LINE%%|*}"; M="${LINE#*|}"
+                MSG="${MSG}🟢 *${S}* recuperado"
+                [ -n "$M" ] && MSG="${MSG}"$'\n'"${M}"
+              else
+                MSG="${MSG}🟢 *${COUNT} sitios recuperados*"
+                while IFS='|' read -r s m; do
+                  [ -n "$s" ] && MSG="${MSG}"$'\n'"• ${s}"
+                done <<< "$FRESH_UP"
+              fi
+            fi
+
+            {
+              echo "send=true"
+              echo "message<<TGEOF"
+              echo "$MSG"
+              echo "TGEOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "==> Notificando cambio de estado."
+            exit 0
+          fi
+
+          echo "==> Sin cambios recientes. Evaluando persistencia..."
+
+          # ============================================================
+          # 2. PERSISTENCIA CON ESCALAMIENTO
+          # ============================================================
+          DOWN_LINES=""
+
+          for file in history/*.yml; do
+            [ -f "$file" ] || continue
+
+            STATUS_VAL=$(grep -m1 "status:" "$file" 2>/dev/null \
+              | sed 's/status://' | tr -d ' "'\''' || true)
+            [ "$STATUS_VAL" = "down" ] || continue
+
+            SITE=$(site_from_file "$file")
+
+            # El ultimo commit que toco este archivo = momento de la caida
+            DOWN_TS=$(git log -1 --format=%ct -- "$file" 2>/dev/null || true)
+
+            if [ -z "$DOWN_TS" ]; then
+              echo "    $SITE: sin historial en el clon, uso intervalo largo."
+              DOWN_MIN=999999
+            else
+              DOWN_MIN=$(( (NOW - DOWN_TS) / 60 ))
+            fi
+
+            # Elegir intervalo segun antiguedad
+            if   [ "$DOWN_MIN" -lt "$ESC_1_UNTIL" ]; then EVERY=$ESC_1_EVERY
+            elif [ "$DOWN_MIN" -lt "$ESC_2_UNTIL" ]; then EVERY=$ESC_2_EVERY
+            else                                          EVERY=$ESC_3_EVERY
+            fi
+
+            # ¿Toca alertar en esta corrida?
+            if [ $((DOWN_MIN % EVERY)) -lt "$RUN_INTERVAL" ]; then
+              AGE_TXT=$(humanize $((DOWN_MIN * 60)))
+              DOWN_LINES="${DOWN_LINES}${SITE}|${AGE_TXT}"$'\n'
+              echo "    $SITE: caido ${DOWN_MIN}min (cada ${EVERY}min) -> ALERTA"
+            else
+              echo "    $SITE: caido ${DOWN_MIN}min (cada ${EVERY}min) -> silencio"
             fi
           done
-          
-          if [ -n "$DOWN_SITES" ]; then
-            echo "🚨 DETECTADO: $DOWN_SITES sigue caído."
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "status=🔴 SIGUE CAÍDO" >> $GITHUB_OUTPUT
-            echo "emoji=⚠️" >> $GITHUB_OUTPUT
-            echo "site=$DOWN_SITES" >> $GITHUB_OUTPUT
-            echo "custom_message=Los siguientes sitios continúan sin responder" >> $GITHUB_OUTPUT
-            echo "commit_msg=Alerta continua cada 5 min mientras persista el error" >> $GITHUB_OUTPUT
-          else
-            echo "✨ Todos los sitios leídos están UP."
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+
+          if [ -z "$DOWN_LINES" ]; then
+            echo "send=false" >> "$GITHUB_OUTPUT"
+            echo "==> Nada que notificar."
+            exit 0
           fi
-          
+
+          COUNT=$(echo "$DOWN_LINES" | grep -c . || true)
+          if [ "$COUNT" -eq 1 ]; then
+            LINE=$(echo "$DOWN_LINES" | head -1)
+            S="${LINE%%|*}"; A="${LINE#*|}"
+            MSG="🔴 *${S}* caído"$'\n'"Sin respuesta  ·  ${A}"
+          else
+            MSG="🔴 *${COUNT} sitios caídos*"
+            while IFS='|' read -r s a; do
+              [ -n "$s" ] && MSG="${MSG}"$'\n'"• ${s}  ·  ${a}"
+            done <<< "$DOWN_LINES"
+          fi
+
+          {
+            echo "send=true"
+            echo "message<<TGEOF"
+            echo "$MSG"
+            echo "TGEOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Send Telegram notification
-        if: steps.check.outputs.has_changes == 'true'
+        if: steps.check.outputs.send == 'true'
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           format: markdown
-          message: |
-            ${{ steps.check.outputs.emoji }} *ALERTA DE MONITOREO*
-            
-            *Sitio:* ${{ steps.check.outputs.site }}
-            *Estado:* ${{ steps.check.outputs.status }}
-            
-            ${{ steps.check.outputs.custom_message }}
-            
-            📋 _${{ steps.check.outputs.commit_msg }}_
-            
-            🔗 [Ver detalles](https://github.com/${{ github.repository }}/actions)
-            
-            _Arissta Uptime Monitor_
+          disable_web_page_preview: true
+          message: ${{ steps.check.outputs.message }}
