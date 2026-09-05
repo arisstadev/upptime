@@ -1,224 +1,49 @@
-name: Notification CI
+# Change these first
+owner: arisstadev
+repo: upptime
 
-on:
-  workflow_run:
-    workflows: ["Uptime CI"]
-    types:
-      - completed
+sites:
+  - name: AJTM Frontend
+    url: https://ajtm.com.mx
+  - name: Arissta
+    url: https://arissta.com
+  - name: MIME Minerales
+    url: https://mimeminerales.com
+  - name: Team CLD
+    url: https://teamcld.com
+  - name: TeamCLD Backend API
+    url: https://api.teamcld.com/api/health
+  - name: Thermo Ingeniería
+    url: https://thermoingenieriayequipos.com
+  - name: MIME Backend API
+    url: https://api-core7.mimeminerales.com/health
+  - name: Gine Palafox Juriquilla
+    url: https://ginepalafoxjuriquilla.com
+  - name: Manolo de la Barquera
+    url: https://manolodelabarquera.com
+  - name: Salsas y Productos Hervi
+    url: https://salsasyproductoshervi.com
+  - name: Monte Horeb
+    url: https://montehoreb.com.mx
 
-jobs:
-  notify:
-    name: Send notifications
-    runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 300
+status-website:
+  baseUrl: /upptime
+  logoUrl: https://raw.githubusercontent.com/upptime/upptime.js.org/master/static/img/icon.svg
+  name: Arissta Monitor
+  introTitle: "**Arissta** uptime monitor"
+  introMessage: Sistema de monitoreo para todos los sitios web
+  navbar:
+    - title: Status
+      href: /
+    - title: GitHub
+      href: https://github.com/$OWNER/$REPO
 
-      - name: Evaluar estado y decidir notificacion
-        id: check
-        run: |
-          set -euo pipefail
+# Telegram notifications
+notifications:
+  - type: telegram
+    botToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    chatId: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          # ============================================================
-          # CONFIGURACION
-          # ============================================================
-          FRESH_WINDOW=240        # seg. Ventana para considerar un commit "recien hecho"
-          RUN_INTERVAL=5          # min. Cada cuanto corre Uptime CI
-
-          # Escalamiento
-          ESC_1_UNTIL=30;  ESC_1_EVERY=5
-          ESC_2_UNTIL=120; ESC_2_EVERY=20
-          ESC_3_EVERY=60
-
-          FIRMA="_Arissta Uptime Monitor_"
-
-          NL=$'\n'
-          NOW=$(date +%s)
-
-          # ============================================================
-          # HELPERS
-          # ============================================================
-
-          humanize() {
-            local mins=$1
-            if [ "$mins" -lt 60 ]; then
-              echo "hace ${mins} min"
-            elif [ "$mins" -lt 1440 ]; then
-              echo "hace $((mins / 60)) h"
-            else
-              echo "hace $((mins / 1440)) d"
-            fi
-          }
-
-          # "🟩 Monte Horeb is up (200 in 422 ms) [skip ci]" -> "Monte Horeb"
-          site_from_commit() {
-            echo "$1" | sed -E 's/^[^A-Za-z0-9]*//' | sed -E 's/ is (up|down).*//' | xargs
-          }
-
-          # monte-horeb.yml -> Monte Horeb
-          site_from_file() {
-            basename "$1" .yml | sed 's/-/ /g' \
-              | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2));}1'
-          }
-
-          emit() {
-            {
-              echo "send=true"
-              echo "message<<TGEOF"
-              echo "$1"
-              echo "TGEOF"
-            } >> "$GITHUB_OUTPUT"
-          }
-
-          # ============================================================
-          # 1. CAMBIOS DE ESTADO RECIENTES
-          # ============================================================
-          echo "==> Buscando cambios de estado recientes..."
-
-          SEEN="|"
-          DOWN_SITES=""; DOWN_MSGS=""
-          UP_SITES="";   UP_MSGS=""
-
-          while IFS='|' read -r ts msg; do
-            [ -z "${ts:-}" ] && continue
-            AGE=$((NOW - ts))
-            [ "$AGE" -gt "$FRESH_WINDOW" ] && continue
-
-            SITE=$(site_from_commit "$msg")
-            [ -z "$SITE" ] && continue
-
-            # git log viene de mas nuevo a mas viejo: solo cuenta el 1er estado por sitio
-            case "|${SEEN}" in *"|${SITE}|"*) continue ;; esac
-            SEEN="${SEEN}${SITE}|"
-
-            if echo "$msg" | grep -q " is up"; then
-              UP_SITES="${UP_SITES:+$UP_SITES, }${SITE}"
-              UP_MSGS="${UP_MSGS:+$UP_MSGS$NL}${msg}"
-              echo "    RECUPERADO: $SITE"
-            elif echo "$msg" | grep -q " is down"; then
-              DOWN_SITES="${DOWN_SITES:+$DOWN_SITES, }${SITE}"
-              DOWN_MSGS="${DOWN_MSGS:+$DOWN_MSGS$NL}${msg}"
-              echo "    CAIDO: $SITE"
-            fi
-          done < <(git log -n 30 --format="%ct|%s" | grep -E " is (up|down)" || true)
-
-          BLOQUES=""
-
-          if [ -n "$DOWN_SITES" ]; then
-            if echo "$DOWN_SITES" | grep -q ", "; then
-              TXT="Los siguientes sitios están experimentando problemas y no responden"
-            else
-              TXT="${DOWN_SITES} está experimentando problemas y no responde"
-            fi
-            BLOQUES="⚠️ *ALERTA DE MONITOREO*
-
-          *Sitio:* ${DOWN_SITES}
-          *Estado:* 🔴 CAÍDO
-
-          ${TXT}
-
-          📋 _${DOWN_MSGS}_
-
-          ${FIRMA}"
-          fi
-
-          if [ -n "$UP_SITES" ]; then
-            if echo "$UP_SITES" | grep -q ", "; then
-              TXT="Los siguientes sitios se han recuperado y funcionan correctamente"
-            else
-              TXT="${UP_SITES} se ha recuperado y está funcionando correctamente"
-            fi
-            BLOQUE_UP="✅ *ALERTA DE MONITOREO*
-
-          *Sitio:* ${UP_SITES}
-          *Estado:* 🟢 RECUPERADO
-
-          ${TXT}
-
-          📋 _${UP_MSGS}_
-
-          ${FIRMA}"
-            BLOQUES="${BLOQUES:+$BLOQUES$NL$NL}${BLOQUE_UP}"
-          fi
-
-          if [ -n "$BLOQUES" ]; then
-            emit "$BLOQUES"
-            echo "==> Notificando cambio de estado."
-            exit 0
-          fi
-
-          echo "==> Sin cambios recientes. Evaluando persistencia..."
-
-          # ============================================================
-          # 2. PERSISTENCIA CON ESCALAMIENTO
-          # ============================================================
-          LISTA=""
-          MIN_EVERY=0
-
-          for file in history/*.yml; do
-            [ -f "$file" ] || continue
-
-            STATUS_VAL=$(grep -m1 "status:" "$file" 2>/dev/null \
-              | sed 's/status://' | tr -d ' "'\''' || true)
-            [ "$STATUS_VAL" = "down" ] || continue
-
-            SITE=$(site_from_file "$file")
-            DOWN_TS=$(git log -1 --format=%ct -- "$file" 2>/dev/null || true)
-
-            if [ -z "$DOWN_TS" ]; then
-              DOWN_MIN=999999
-            else
-              DOWN_MIN=$(( (NOW - DOWN_TS) / 60 ))
-            fi
-
-            if   [ "$DOWN_MIN" -lt "$ESC_1_UNTIL" ]; then EVERY=$ESC_1_EVERY
-            elif [ "$DOWN_MIN" -lt "$ESC_2_UNTIL" ]; then EVERY=$ESC_2_EVERY
-            else                                          EVERY=$ESC_3_EVERY
-            fi
-
-            if [ $((DOWN_MIN % EVERY)) -lt "$RUN_INTERVAL" ]; then
-              LISTA="${LISTA:+$LISTA, }${SITE} ($(humanize $DOWN_MIN))"
-              if [ "$MIN_EVERY" -eq 0 ] || [ "$EVERY" -lt "$MIN_EVERY" ]; then
-                MIN_EVERY=$EVERY
-              fi
-              echo "    $SITE: caido ${DOWN_MIN}min (cada ${EVERY}min) -> ALERTA"
-            else
-              echo "    $SITE: caido ${DOWN_MIN}min (cada ${EVERY}min) -> silencio"
-            fi
-          done
-
-          if [ -z "$LISTA" ]; then
-            echo "send=false" >> "$GITHUB_OUTPUT"
-            echo "==> Nada que notificar."
-            exit 0
-          fi
-
-          if [ "$MIN_EVERY" -ge 60 ]; then
-            FREQ="cada $((MIN_EVERY / 60)) h"
-          else
-            FREQ="cada ${MIN_EVERY} min"
-          fi
-
-          emit "⚠️ *ALERTA DE MONITOREO*
-
-          *Sitio:* ${LISTA}
-          *Estado:* 🔴 SIGUE CAÍDO
-
-          Los siguientes sitios continúan sin responder
-
-          📋 _Alerta ${FREQ} mientras persista el error_
-
-          ${FIRMA}"
-
-      - name: Send Telegram notification
-        if: steps.check.outputs.send == 'true'
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          format: markdown
-          disable_web_page_preview: true
-          message: ${{ steps.check.outputs.message }}
+# Desactivar schedule automático de GitHub (usamos cron-job.org)
+workflowSchedule:
+  uptime: ""
