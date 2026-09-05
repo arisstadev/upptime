@@ -25,6 +25,8 @@ sites:
     url: https://salsasyproductoshervi.com
   - name: Monte Horeb
     url: https://montehoreb.com.mx
+  - name: Test Alerta
+    url: https://test-alerta-arissta.invalid
 
 status-website:
   baseUrl: /upptime
